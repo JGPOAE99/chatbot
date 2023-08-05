@@ -28,6 +28,7 @@ OPENAI_API_KEY=
 ```
 
 **4. Create vector store**
+
 After uploading some `*.pdf` documents to your folders `/data/*`, call the function `load_documents(data_path: string)` from `data_ingest_qdrant.py` to create the vector store on [Qdrant Cloud](https://qdrant.tech/). (You will need to create a Free cluster before doing this)
 
 
