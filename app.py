@@ -1,115 +1,100 @@
+from styles import css, bot_template, user_template
 import streamlit as st
 from dotenv import load_dotenv
-from PyPDF2 import PdfReader
-from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from streamlit_option_menu import option_menu
-from appStyles import css, bot_template, user_template
+from langchain.vectorstores import Qdrant
+import os
+from qdrant_client import QdrantClient
+import time
 
 
-def get_pdf_text(pdf_docs):
-    text = ""
-    for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
-    return text
-
-
-def get_text_chunks(text):
-    text_splitter = CharacterTextSplitter(
-        separator="\n",
-        chunk_size=1000,
-        chunk_overlap=200,
-        length_function=len
-    )
-    chunks = text_splitter.split_text(text)
-    return chunks
-
-
-def get_vectorstore(text_chunks):
-    embeddings = OpenAIEmbeddings()
-    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
-    return vectorstore
-
-
-def get_conversation_chain(vectorstore):
+def get_conversation_chain():
     llm = ChatOpenAI()
-    # llm = HuggingFaceHub(repo_id="clibrain/lince-zero",
-    #                      model_kwargs={
-    #                          "temperature": 0.5,
-    #                          "max_new_tokens": 512
-    #                          })
-
-    memory = ConversationBufferMemory(
-        memory_key='chat_history', return_messages=True)
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    qdrant_client = QdrantClient(
+        url=os.getenv("QDRANT_HOST"),
+        api_key=os.getenv("QDRANT_API_KEY"),
+    )
+    vectorstore = Qdrant(
+        client=qdrant_client,
+        collection_name=os.getenv("QDRANT_COLLECTION_NAME"),
+        embeddings=OpenAIEmbeddings(),
+        content_payload_key="curso",
+    )
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vectorstore.as_retriever(),
-        memory=memory
+        memory=memory,
     )
     return conversation_chain
 
 
 def handle_userinput(user_question):
-    response = st.session_state.conversation({'question': user_question})
-    st.session_state.chat_history = response['chat_history']
-
+    response = st.session_state.conversation({"question": user_question})
+    st.session_state.chat_history = response["chat_history"]
     for i, message in enumerate(st.session_state.chat_history):
         if i % 2 == 0:
-            st.write(user_template.replace(
-                "{{MSG}}", message.content), unsafe_allow_html=True)
+            st.write(
+                user_template.replace("{{MSG}}", message.content),
+                unsafe_allow_html=True,
+            )
         else:
-            st.write(bot_template.replace(
-                "{{MSG}}", message.content), unsafe_allow_html=True)
+            st.write(
+                bot_template.replace("{{MSG}}", message.content), unsafe_allow_html=True
+            )
+
+
+def clear_input():
+    st.session_state["user_question"] = st.session_state["question_input"]
+    st.session_state["question_input"] = ""
 
 
 def main():
     load_dotenv()
-    st.set_page_config(page_title="Pregunta a tus documentos!",
-                       page_icon=":books:")
+    st.set_page_config(page_title="Pregunta a tus documentos!", page_icon=":books:")
     st.write(css, unsafe_allow_html=True)
+    st.session_state.conversation = get_conversation_chain()
 
+    # Option Menu
     with st.sidebar:
-        option_menu("UBot", ["Resuelve tus dudas", 'Documentos'],
-                    icons=['house', 'cloud-upload'],
-                    default_index=0,
-                    key='selected_option')
+        option_menu(
+            "UBot",
+            ["Resuelve tus dudas", "Documentos"],
+            icons=["house", "cloud-upload"],
+            default_index=0,
+            key="selected_option",
+        )
+    if st.session_state["selected_option"] == "Documentos":
+        # TODO Upload pdf_docs to Qdrant on upload
+        st.file_uploader(
+            "Sube aquí tus archivos PDF y haz click en 'Process'",
+            accept_multiple_files=True,
+        )
 
-    if st.session_state['selected_option'] == "Resuelve tus dudas" or st.session_state['selected_option'] is None:
+    else:
         if "conversation" not in st.session_state:
             st.session_state.conversation = None
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = None
+        if "question_input" not in st.session_state:
+            st.session_state.question_input = ""
+        if "user_question" not in st.session_state:
+            st.session_state.user_question = ""
 
         st.header("Pregunta a tus documentos!")
-        user_question = st.text_input("Escribe tu pregunta a continuación:")
-        if user_question:
-            handle_userinput(user_question)
 
-    if st.session_state['selected_option'] == "Documentos":
-        pdf_docs = st.file_uploader(
-            "Sube aquí tus archivos PDF y haz click en 'Process'",
-            accept_multiple_files=True),
-
-        if st.button("Process"):
-            with st.spinner("Procesando..."):
-                text = ""
-                for doc in pdf_docs:
-                    raw_text = get_pdf_text(doc)
-                    text += f"\n{raw_text}"
-
-                text_chunks = get_text_chunks(text)
-
-                vectorstore = get_vectorstore(text_chunks)
-
-                st.session_state.conversation = get_conversation_chain(
-                    vectorstore)
+        st.text_input(
+            "Escribe tu pregunta a continuación:",
+            key="question_input",
+            on_change=clear_input,
+        )
+        if st.session_state["user_question"]:
+            handle_userinput(st.session_state["user_question"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
