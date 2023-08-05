@@ -1,5 +1,5 @@
 # chatbot
-App web desarrollada utili
+Demo chatbot using Langchain, Qdrant an OpenAI in Python.
 
 
 ## Running Locally
