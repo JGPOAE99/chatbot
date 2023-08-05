@@ -64,8 +64,8 @@ def load_documents(directory_path):
         ids = list(range(len(texts)))
         assert len(texts) == len(embedd) and len(texts) == len(
             ids
-        ), "Las dimensiones de los embeddings no coinciden"
-        meta = [{"curso": folder, "raw_text": text} for text in texts]
+        ), "Embeddings dimmensions do not match text chunks"
+        meta = [{"course": folder, "raw_text": text} for text in texts]
         client.upsert(
             collection_name=collection_name,
             points=Batch(ids=ids, vectors=embedd, payloads=meta),
@@ -73,4 +73,4 @@ def load_documents(directory_path):
         collection_vector_count = client.get_collection(
             collection_name=collection_name
         ).vectors_count
-        print(f"Vectores en la coleccion: {collection_vector_count}")
+        print(f"Collection vector count: {collection_vector_count}")

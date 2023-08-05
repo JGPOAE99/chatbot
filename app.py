@@ -9,7 +9,6 @@ from streamlit_option_menu import option_menu
 from langchain.vectorstores import Qdrant
 import os
 from qdrant_client import QdrantClient
-import time
 
 
 def get_conversation_chain():
